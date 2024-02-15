@@ -1,6 +1,8 @@
 #include <Windows.h>
 #include <iostream>
 
+#define SLEEP_TIME 1000
+
 typedef void(__stdcall* TrueSleep)(DWORD);
 
 TrueSleep oSleep;
@@ -15,9 +17,9 @@ void __stdcall MySleep(DWORD dwMilliseconds)
 
 bool HookIAT(const char* module_name, const char* func_name, void* new_func, void** old_func)
 {
-	DWORD module_base = (DWORD)GetModuleHandleA(NULL);
+	uintptr_t module_base = (uintptr_t)GetModuleHandleA(NULL);
 	IMAGE_DOS_HEADER* dos_header = (IMAGE_DOS_HEADER*)module_base;
-	IMAGE_NT_HEADERS32* pe_header = (IMAGE_NT_HEADERS32*)(module_base + dos_header->e_lfanew);
+	IMAGE_NT_HEADERS* pe_header = (IMAGE_NT_HEADERS*)(module_base + dos_header->e_lfanew);
 
 	if (pe_header->Signature != IMAGE_NT_SIGNATURE)
 		return false;
@@ -35,8 +37,8 @@ bool HookIAT(const char* module_name, const char* func_name, void* new_func, voi
 		if (!import_descriptor[i].FirstThunk || !import_descriptor[i].OriginalFirstThunk)
 			return false;
 
-		IMAGE_THUNK_DATA32* thunk = (IMAGE_THUNK_DATA32*)(module_base + import_descriptor[i].FirstThunk);
-		IMAGE_THUNK_DATA32* orig_thunk = (IMAGE_THUNK_DATA32*)(module_base + import_descriptor[i].OriginalFirstThunk);
+		IMAGE_THUNK_DATA* thunk = (IMAGE_THUNK_DATA*)(module_base + import_descriptor[i].FirstThunk);
+		IMAGE_THUNK_DATA* orig_thunk = (IMAGE_THUNK_DATA*)(module_base + import_descriptor[i].OriginalFirstThunk);
 
 		for (; orig_thunk->u1.Function != 0; ++thunk, ++orig_thunk)
 		{
@@ -56,7 +58,7 @@ bool HookIAT(const char* module_name, const char* func_name, void* new_func, voi
 				return false;
 
 			*old_func = (void*)thunk->u1.Function;
-			thunk->u1.Function = (DWORD)new_func;
+			thunk->u1.Function = (uintptr_t)new_func;
 
 			if (VirtualProtect(mbi.BaseAddress, mbi.RegionSize, mbi.Protect, &junk))
 				return true;
@@ -72,6 +74,8 @@ int main()
 	else
 	{
 		printf("[+] old_addr = 0x%p, new_addr = 0x%p\n", oSleep, &MySleep);
-		Sleep(1000);
+		Sleep(SLEEP_TIME);
 	}
+
+	system("pause");
 }
